@@ -42,29 +42,45 @@ system_setup() {
     log_info "Updating system"
     apt-get update
 
-    # Install docker, perl, and postgres
+    # Install packages
     log_info "Installing docker and dependencies"
-    package_list="docker.io openssl fail2ban openssh-server"
+    package_list="docker.io openssl fail2ban openssh-server nftables"
     log_debug "Installing packages: $package_list"
     apt-get install -y $package_list
 }
 
 firewall_setup() {
     log_info "Setting up firewall rules"
-    ufw default deny incoming
-    ufw default allow outgoing
+
+    # Ensure nftables service is running
+    systemctl enable --now nftables
+
+    # Flush existing rules to start clean
+    nft flush ruleset
+
+    # Create the base table and chain with default policy (deny incoming, allow outgoing)
+    nft add table inet filter
+    nft add chain inet filter input \{ type filter hook input priority 0 \; policy drop \; \}
+    nft add chain inet filter forward \{ type filter hook forward priority 0 \; policy drop \; \}
+    nft add chain inet filter output \{ type filter hook output priority 0 \; policy accept \; \}
+
+    # Allow loopback interface traffic
+    nft add rule inet filter input iifname "lo" accept
+
+    # Allow established and related connections (required for responses to outgoing traffic)
+    nft add rule inet filter input ct state established,related accept
 
     # Allow SSH
     log_debug "Allowing traffic on port 22 TCP (SSH)"
-    ufw allow 22/tcp
-    
-    # Allow custom Nginx port
+    nft add rule inet filter input tcp dport 22 accept
+
+    # Allow custom port 9999
     log_debug "Allowing traffic on port 9999 TCP for feedback app"
-    ufw allow 9999/tcp
-    
-    # Enable firewall
-    log_debug "Enabling firewall"
-    ufw --force enable
+    nft add rule inet filter input tcp dport 9999 accept
+
+    # Make rules persistent across reboots
+    log_debug "Saving nftables ruleset"
+    nft list ruleset > /etc/nftables.conf
 }
 
 sshd_setup() {
@@ -92,14 +108,24 @@ start_fail2ban() {
 }
 
 env_setup() {
-    # Make sure docker is enabled
-    log_debug "Enabling docker service"
-    systemctl enable --now docker
-    
-    # Create docker network for containers to talk to each other (if necessary)
+    # Ensure Debian has iptables installed for Docker's NAT rules
+    if ! command -v iptables >/dev/null 2>&1; then
+        log_info "Installing iptables prerequisite for Docker"
+        apt-get update && apt-get install -y iptables
+    fi
+
+    # Enable and FORCE RESTART docker to rebuild iptables chains wiped by the firewall
+    log_debug "Restarting Docker service to regenerate iptables rules"
+    systemctl enable docker
+    systemctl restart docker
+
+    # Wait briefly for Docker daemon socket to be fully ready
+    sleep 2
+
+    # Create docker network for containers to talk to each other
     log_info "Creating container network"
     if ! /usr/bin/docker network inspect "$NETWORK" >/dev/null 2>&1; then
-	/usr/bin/docker network create "$NETWORK"
+        /usr/bin/docker network create "$NETWORK"
     fi
 
     # Cleanup existing containers for a clean deployment
