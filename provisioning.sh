@@ -150,9 +150,9 @@ start_app() {
 
     # Gracefully stop the service app (if already exists)
     if docker ps -a --format '{{.Names}}' | grep -q "^$SERVICE_APP$"; then
-	log_info "Stopping existing service app gracefully"
-	/usr/bin/docker stop "$SERVICE_APP" || true
-	/usr/bin/docker rm "$SERVICE_APP" || true
+	  log_info "Stopping existing service app gracefully"
+	  /usr/bin/docker stop "$SERVICE_APP" || true
+	  /usr/bin/docker rm "$SERVICE_APP" || true
     fi
     
     # Starting feedback app container
@@ -164,7 +164,7 @@ start_app() {
 		    --log-opt max-file=3 \
 		    --restart always \
 		    --publish 9999:9999 \
-		    --volume "$DOCKER_LOGS/$SERVICE_APP/flask:/var/log/flask" \
+		    --volume "/home/wet_model/scripts:/app/scripts"
 		    "$app_artifact"
 }
 
