@@ -5,7 +5,6 @@ set -euo pipefail
 # Variables
 LOG_FILE="/var/log/provisioning.log"
 DOCKER_LOGS="/var/log/docker"
-NETWORK="wet-network"
 SERVICE_APP="wet_app"
 VERBOSE="false"
 
@@ -122,12 +121,6 @@ env_setup() {
     # Wait briefly for Docker daemon socket to be fully ready
     sleep 2
 
-    # Create docker network for containers to talk to each other
-    log_info "Creating container network"
-    if ! /usr/bin/docker network inspect "$NETWORK" >/dev/null 2>&1; then
-        /usr/bin/docker network create "$NETWORK"
-    fi
-
     # Cleanup existing containers for a clean deployment
     log_info "Cleaning up old container instances"
     /usr/bin/docker rm -f "$SERVICE_APP" >/dev/null 2>&1 || true
@@ -158,14 +151,16 @@ start_app() {
     # Starting feedback app container
     log_info "Starting $SERVICE_APP container"
     /usr/bin/docker run -d \
-		    --name "$SERVICE_APP" \
-		    --network "$NETWORK" \
-		    --log-opt max-size=10m \
-		    --log-opt max-file=3 \
-		    --restart always \
-		    --publish 9999:9999 \
-		    --volume "/home/wet_model/scripts:/app/scripts"
-		    "$app_artifact"
+    --name "$SERVICE_APP" \
+    --network host \
+    --dns 8.8.8.8 \
+    --log-opt max-size=10m \
+    --log-opt max-file=3 \
+    --restart always \
+    --publish 9999:9999 \
+    --volume "/home/wet_model/scripts:/app/scripts" \
+    "$app_artifact" \
+    gunicorn --bind 0.0.0.0:9999 --timeout 240 --workers 4 app:app
 }
 
 integration_health() {
