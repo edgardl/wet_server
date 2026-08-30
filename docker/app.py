@@ -2,7 +2,7 @@ import importlib.util
 import os
 import subprocess
 import sys
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 app = Flask(__name__)
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), 'scripts')
@@ -10,27 +10,28 @@ SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), 'scripts')
 # Cache to store the modification timestamp of processed requirements.txt files
 INSTALLED_REQUIREMENTS = {}
 
+
 def ensure_dependencies(app_dir):
     """Checks for requirements.txt and installs missing packages if updated or uninstalled."""
     req_path = os.path.join(app_dir, 'requirements.txt')
-    
+
     if not os.path.isfile(req_path):
         return
 
     # Check the file's last modified time
     current_mtime = os.path.getmtime(req_path)
-    
+
     # If requirements.txt has not changed since last install, skip
     if INSTALLED_REQUIREMENTS.get(req_path) == current_mtime:
         return
 
     print(f"[Auto-Installer] Installing dependencies from {req_path}...")
-    
+
     try:
         # Run pip install using the active Python executable
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install", 
-            "--no-cache-dir", 
+            sys.executable, "-m", "pip", "install",
+            "--no-cache-dir",
             "-r", req_path
         ])
         # Update cache with current modification time upon success
@@ -38,6 +39,7 @@ def ensure_dependencies(app_dir):
         print(f"[Auto-Installer] Successfully installed requirements for {os.path.basename(app_dir)}")
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Failed to install dependencies from requirements.txt: {e}")
+
 
 @app.route('/<path:app_path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def execute_app(app_path):
@@ -72,19 +74,33 @@ def execute_app(app_path):
         if module_dir not in sys.path:
             sys.path.insert(0, module_dir)
 
-        # 3. Dynamically import and run the module
-        spec = importlib.util.spec_from_file_location("dynamic_app_main", script_path)
+        # 3. Dynamic import with module cache invalidation for hot-reloading
+        module_name = f"dynamic_app_{clean_path.replace('/', '_')}"
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+
+        spec = importlib.util.spec_from_file_location(module_name, script_path)
         module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
         spec.loader.exec_module(module)
 
         if not hasattr(module, 'run'):
-            return jsonify({"error": f"Script '{os.path.basename(script_path)}' must define a 'run(request)' function."}), 400
+            return jsonify(
+                {"error": f"Script '{os.path.basename(script_path)}' must define a 'run(request)' function."}), 400
 
+        # 4. Execute script runner
         result = module.run(request)
+
+        # FIX: Allow raw Flask Response returns (HTML pages, media streams, custom headers)
+        if isinstance(result, Response):
+            return result
+
+        # Default: Wrap dictionary/list results in JSON
         return jsonify({"status": "success", "data": result})
 
     except Exception as e:
         return jsonify({"error": "App execution failed", "details": str(e)}), 500
+
 
 if __name__ == '__main__':
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
