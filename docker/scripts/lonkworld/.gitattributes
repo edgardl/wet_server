@@ -1,0 +1,3 @@
+# Preserve the verified upstream XC source and its save compatibility hash.
+LonkWorld.xc text eol=lf whitespace=-blank-at-eol
+*.py text eol=lf
