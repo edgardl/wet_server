@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LonkWorld · XC</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;background:#101b22;color:#e6efe9}body{max-width:1200px;margin:auto;padding:24px}h1{margin-bottom:4px;color:#9fe5bd}p{line-height:1.5;color:#b9cdc6}button,input,select{font:inherit;border:1px solid #52716c;border-radius:8px;background:#20343c;color:inherit;padding:10px}button{cursor:pointer}button:hover{background:#36545b}button:disabled{opacity:.5;cursor:wait}nav,form{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}input{flex:1;min-width:180px}main{display:grid;grid-template-columns:1fr 1fr;gap:18px}.panel,.lonk{background:#182a31;border:1px solid #324d51;border-radius:12px;padding:18px}.lonk{margin:10px 0;cursor:pointer}.lonk.selected{border-color:#9fe5bd}h2{font-size:1.15rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.6}#status{min-height:1.5em;color:#edc88f}#log{max-height:260px;overflow:auto}small{color:#afc6bc}label{display:flex;gap:8px;align-items:center}@media(max-width:720px){main{grid-template-columns:1fr}body{padding:14px}}
+</style>
+<h1>LonkWorld <small>XC</small></h1><p>A little world that learns your words. Teach the Lonks, watch them graduate, and discover their colonies and relationships.</p>
+<nav aria-label="World controls"><button id="play">Play</button><button id="step">Step a day</button><button id="new">New world</button><button id="save">Save locally</button><button id="export">Export world</button><button id="import">Import world</button><input id="file" type="file" accept="application/json,.json" hidden></nav>
+<div id="status" role="status" aria-live="polite">Opening your world…</div>
+<form id="talk"><label>Talk to <select id="target"><option value="">Everyone</option></select></label><input id="message" maxlength="500" placeholder="Teach a phrase or say hello" aria-label="Message to the Lonks" required><button>Say it</button></form>
+<main><section class="panel"><h2 id="day">The Lonks</h2><div id="lonks"></div></section><section class="panel"><h2>Get to know a Lonk</h2><pre id="details">Select a Lonk.</pre><h2>Colonies & world memories</h2><pre id="colonies"></pre></section></main>
+<section class="panel" style="margin-top:18px"><h2>Life in the world</h2><pre id="log"></pre></section>
+<p><small>Your world is saved in this browser after each turn. Export a copy to keep it or move it to another browser. Playing advances one day at a time while this page stays open.</small></p>
+<script>
+'use strict';
+const $=id=>document.getElementById(id), key='lonkworld-xc-world-v2';
+let world=null, worldJSON=null, selected=null, playing=false, busy=false, timer=null;
+function status(s){$('status').textContent=s;}
+function pause(){playing=false;clearTimeout(timer);$('play').textContent='Play';}
+function persist(){try{localStorage.setItem(key,worldJSON);return true;}catch(e){status('World is open, but browser storage is unavailable. Export a copy.');return false;}}
+function show(){
+ $('day').textContent=`Day ${world.tick} · ${world.lonks.length} Lonks`;
+ const oldTarget=$('target').value;$('target').replaceChildren(new Option('Everyone',''));$('lonks').replaceChildren();
+ for(const l of world.lonks){
+  if(l.alive)$('target').add(new Option(l.name,l.uid));
+  const b=document.createElement('button');b.className='lonk'+(l.uid===selected?' selected':'');b.style.display='block';b.style.width='100%';b.style.textAlign='left';
+  const s=l.social||{},stage=s.graduated_at!=null?'Graduate':(s.learning_stage||s.stage||'Learning').replaceAll('_',' ');
+  b.textContent=`${l.name} · ${stage}\n${l.territory} · age ${l.age} · ${l.alive?'alive':'remembered'}`;
+  b.onclick=()=>{selected=l.uid;show();};$('lonks').append(b);
+ }
+ if([...$('target').options].some(o=>o.value===oldTarget))$('target').value=oldTarget;
+ const l=world.lonks.find(l=>l.uid===selected)||world.lonks[0];
+ if(l){selected=l.uid;const s=l.social||{},lang=l.linguistics||{},names=Object.fromEntries(world.lonks.map(x=>[x.uid,x.name]));
+ $('details').textContent=`${l.name} · generation ${l.generation}\nLearning: ${s.graduated_at!=null?'Graduate since day '+s.graduated_at:s.learning_stage||s.stage||'Learning'}\nPartners: ${(s.partners||[]).map(id=>names[id]||id).join(', ')||'None yet'}\n\nFeelings\n${Object.entries(l.emotion).map(([k,v])=>k+': '+Math.round(v)).join(' · ')}\n\nLearned words\n${Object.keys(lang.tokens||{}).slice(0,40).join(', ')||'Ready to listen'}\n\nTheir dialect\n${Object.keys(lang.dialect||{}).slice(0,24).join(', ')||'Still forming'}\n\nRemembered phrases\n${(lang.phrases||[]).slice(-5).join('\n')}\n\nPrivate thoughts\n${(s.thoughts||[]).slice(-5).map(t=>t.text||String(t)).join('\n')}`;
+ }
+ $('colonies').textContent=Object.entries(world.colonies||{}).filter(([id,c])=>c.active!==false&&c.archived_at==null).map(([id,c])=>`${c.name}\n${world.lonks.filter(l=>String((l.social||{}).colony_id)===id).map(l=>l.name).join(', ')}`).join('\n\n')||'No colonies yet. Keep learning together.';
+ $('colonies').textContent+='\n\n'+(world.chronicle||[]).slice(-8).map(e=>`Day ${e.tick} · ${e.text}`).join('\n');
+}
+async function call(extra={},candidate=worldJSON){
+ if(busy)return false;busy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);
+ try{
+  const payload={...extra};if(candidate)payload.world_json=candidate;
+  const response=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const result=await response.json();if(!response.ok||result.error)throw Error(result.error||'Could not advance the world');
+  const data=result.data;worldJSON=data.world_json;world=JSON.parse(worldJSON);show();status(`Day ${world.tick} · Your world is ready`);persist();
+  $('log').textContent=($('log').textContent+'\n'+data.logs.join('\n')).slice(-18000);$('log').scrollTop=$('log').scrollHeight;return true;
+ }catch(e){pause();status(e.message);return false;}finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+}
+async function tick(){if(!playing)return;await call({steps:1});if(playing)timer=setTimeout(tick,1200);}
+$('play').onclick=()=>{if(playing)pause();else{playing=true;$('play').textContent='Pause';tick();}};
+$('step').onclick=()=>{pause();call({steps:1});};
+$('talk').onsubmit=e=>{e.preventDefault();pause();const message=$('message').value;call({message,target_uid:$('target').value||null}).then(ok=>{if(ok)$('message').value='';});};
+$('new').onclick=()=>{pause();if(confirm('Start a new world? Export your current world first if you want to keep it.'))call({seed:Math.floor(Math.random()*4294967296)},null);};
+$('save').onclick=()=>{if(world&&persist())status('World saved in this browser.');};
+$('export').onclick=()=>{if(!world)return;const url=URL.createObjectURL(new Blob([worldJSON],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=`lonkworld-day-${world.tick}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('import').onclick=()=>{pause();$('file').click();};
+$('file').onchange=async()=>{const file=$('file').files[0];if(!file)return;try{if(file.size>2*1024*1024)throw Error('World file exceeds 2 MiB');await call({},await file.text());}catch(e){status('Cannot import: '+e.message);}$('file').value='';};
+(async()=>{let candidate=null;try{candidate=localStorage.getItem(key);}catch(e){status('Browser save could not be read.');}await call({},candidate);})();
+</script></html>
