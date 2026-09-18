@@ -1,0 +1,91 @@
+﻿<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tau / Connection Visualizer</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#0b101b;color:#e9edf8}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button,select,input{border:1px solid #39445f;border-radius:8px;background:#182136;color:inherit;padding:9px}button{cursor:pointer}button:hover{background:#2c3855}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #85e8ce}button:disabled{opacity:.45;cursor:default}.primary{background:#94e6cc;color:#102a26;border-color:#94e6cc}header{padding:25px 32px;border-bottom:1px solid #283149;display:flex;justify-content:space-between;align-items:center}h1{margin:3px 0;font-size:25px;letter-spacing:-1px}.eyebrow{font-size:11px;letter-spacing:3px;color:#94e6cc}small,.muted{color:#aab7cd}main{display:grid;grid-template-columns:minmax(0,1fr) 305px;gap:18px;padding:22px 32px}.panel{background:#111a2a;border:1px solid #283149;border-radius:14px;overflow:hidden}.toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:14px;border-bottom:1px solid #283149}.stats{display:flex;gap:30px;padding:18px}.stat b{display:block;font-size:23px;margin-top:3px;font-variant-numeric:tabular-nums}.stat small{font-size:11px;text-transform:uppercase;letter-spacing:1px}svg{display:block;width:100%;height:auto;min-height:280px;background:radial-gradient(ellipse at center,#18273d,#0d1524);touch-action:none}.node{cursor:grab}.node:focus circle{stroke:white;stroke-width:4}.edge{stroke:#64819f;opacity:.7}.flow{stroke:#a0f0d4;stroke-dasharray:6 15;animation:flow 1.2s linear infinite}@keyframes flow{to{stroke-dashoffset:-42}}.phases{display:flex;gap:8px;padding:14px}.phase{flex:1;padding:10px;border:1px solid #334057;border-radius:7px;text-align:center;color:#aab7cd}.phase.active{background:#204639;border-color:#94e6cc;color:#baf9e6}.note{padding:0 18px 18px;min-height:54px;color:#b4c3da;font-size:13px;line-height:1.5}aside{padding:20px}h2{font-size:16px;margin:0 0 16px}label{display:block;color:#bac7dc;font-size:12px;margin:12px 0 5px}input,select{width:100%}.row{display:flex;gap:8px;margin-top:10px}.row>*{flex:1;min-width:0}hr{border:0;border-top:1px solid #2d3851;margin:20px 0}#status{padding:12px 18px;border-top:1px solid #283149;min-height:45px;font-size:13px}#status.error{color:#ffb2b2;background:#3b1d2b}.legend{padding:10px 18px;font-size:12px;color:#aab7cd;display:flex;justify-content:space-between}.gradient{display:inline-block;width:90px;height:7px;background:linear-gradient(90deg,#55bad4,#f79452);border-radius:4px;margin:0 7px}footer{padding:0 32px 20px;color:#8999b4;font-size:12px}@media(max-width:850px){main{grid-template-columns:1fr;padding:14px}header{padding:20px}header small{display:none}.stats{gap:18px}footer{padding:16px}}@media(prefers-reduced-motion:reduce){.flow{animation:none}}
+</style></head><body>
+<header><div><div class="eyebrow">XEMBRA / EXPERIMENT 01</div><h1>Tau Connection Visualizer</h1></div><small>A lattice playground for Edgar</small></header>
+<main><section class="panel" aria-label="Lattice workspace"><div class="toolbar"><button id="play" class="primary">Play</button><button id="step">Step phase</button><button id="reset">Reset demo</button><button id="save">Save JSON</button><button id="load">Load JSON</button><input id="file" type="file" accept="application/json,.json" hidden></div>
+<div class="stats"><div class="stat"><small>Total energy</small><b id="total">—</b></div><div class="stat"><small>Peak energy</small><b id="peak">—</b></div><div class="stat"><small>Last step ΔE</small><b id="drift">—</b></div></div>
+<svg id="graph" viewBox="0 0 1000 700" role="group" aria-label="Interactive lattice. Select nodes by clicking or pressing Enter. Drag to reposition; arrow keys move selected nodes."></svg>
+<div class="legend"><span>Low <span class="gradient"></span> High energy</span><span>Ring = selected · thick edge = stronger coupling</span></div>
+<div class="phases" aria-label="Next phase"><div class="phase" data-phase="0">F · Focus</div><div class="phase" data-phase="1">D · Diffuse</div><div class="phase" data-phase="2">V · Volition</div><div class="phase" data-phase="3">H · Harmony</div></div>
+<div class="note" id="phaseNote">Next phase is highlighted. Focus observes; Diffuse exchanges energy; Volition is idle; Harmony enforces capacities globally.</div><div id="status" role="status" aria-live="polite">Ready.</div></section>
+<aside class="panel"><h2>Shape the lattice</h2><label for="selected">Selected node</label><select id="selected"></select><div class="row"><div><label for="energy">Energy</label><input id="energy" type="number" min="0" step="1"></div><div><label for="capacity">Capacity</label><input id="capacity" type="number" min="0" step="1"></div></div><div class="row"><button id="apply">Apply</button><button id="remove">Remove</button></div><button id="add" style="width:100%;margin-top:8px">+ Add node</button><hr>
+<h2>τ connection</h2><label for="target">Connect selected node to</label><select id="target"></select><label for="weight">Weight</label><input id="weight" type="number" min="0" step="0.1" value="1"><div class="row"><button id="connect">Set edge</button><button id="disconnect">Remove edge</button></div><hr>
+<h2>Stress experiment</h2><label for="spike">External energy injection</label><input id="spike" type="number" min="0" value="100"><button id="inject" style="width:100%;margin-top:8px">Inject into selected node</button><label for="dt">Diffusion timestep</label><input id="dt" type="number" min="0" max="10" step="0.05" value="0.2"><button id="applyDt" style="width:100%;margin-top:8px">Set timestep</button><p class="muted" style="font-size:12px;line-height:1.6">Drag nodes to arrange the view. Position affects the drawing only; connections determine diffusion. An energy injection increases the total budget.</p></aside></main>
+<footer>Finite graph model · WET Python engine · Capacity projection can transfer across disconnected components.</footer><script>﻿'use strict';
+const $ = id => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+let state, selected = 'psi-1', playing = false, busy = false, timer, drag;
+const copy = value => JSON.parse(JSON.stringify(value));
+function demo() {
+  return {version:1, dt:0.2, phase:0,
+    nodes:Array.from({length:6},(_,i)=>({id:`psi-${i+1}`, energy:i===0?180:4, capacity:100,
+      x:500+260*Math.cos(i*Math.PI/3-Math.PI/2), y:350+230*Math.sin(i*Math.PI/3-Math.PI/2)})),
+    edges:Array.from({length:6},(_,i)=>({source:`psi-${i+1}`,target:`psi-${(i+1)%6+1}`,weight:1}))};
+}
+function status(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error);}
+function pause(){playing=false;clearTimeout(timer);$('play').textContent='Play';}
+function lock(value){busy=value;document.querySelectorAll('button,input,select').forEach(el=>el.disabled=value);$('play').disabled=false;}
+async function request(action='validate', candidate=state, extra={}) {
+  if(busy)return false;
+  lock(true);
+  try {
+    const response=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,state:candidate,...extra})});
+    const result=await response.json();if(!response.ok)throw new Error(result.error);
+    state=result.state;if(!state.nodes.some(n=>n.id===selected))selected=state.nodes[0].id;
+    $('drift').textContent=result.drift===0?'0':result.drift.toExponential(2);
+    status(result.message);render();return true;
+  } catch(error){pause();status(error.message,true);return false;}finally{lock(false);}
+}
+function elem(tag, attrs, text){const el=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);if(text!==undefined)el.textContent=text;return el;}
+function options(el,nodes,value){el.replaceChildren(...nodes.map(n=>new Option(n.id,n.id)));el.value=value; if(el.selectedIndex<0&&nodes.length)el.selectedIndex=0;}
+function render(){
+  const oldTarget=$('target').value;
+  options($('selected'),state.nodes,selected);options($('target'),state.nodes.filter(n=>n.id!==selected),oldTarget);
+  const current=state.nodes.find(n=>n.id===selected);$('energy').value=current.energy;$('capacity').value=current.capacity;$('dt').value=state.dt;
+  $('total').textContent=state.nodes.reduce((a,n)=>a+n.energy,0).toLocaleString(undefined,{maximumFractionDigits:5});
+  const peak=Math.max(...state.nodes.map(n=>n.energy));$('peak').textContent=peak.toLocaleString(undefined,{maximumFractionDigits:3});
+  document.querySelectorAll('[data-phase]').forEach(el=>el.classList.toggle('active',+el.dataset.phase===state.phase));
+  const svg=$('graph');svg.replaceChildren();
+  for(const edge of state.edges){const a=state.nodes.find(n=>n.id===edge.source),b=state.nodes.find(n=>n.id===edge.target);
+    const forward=a.energy>=b.energy,from=forward?a:b,to=forward?b:a;
+    const line=elem('line',{x1:from.x,y1:from.y,x2:to.x,y2:to.y,'stroke-width':1+Math.min(edge.weight,8),class:'edge'+(playing&&state.phase===2&&edge.weight>0&&a.energy!==b.energy?' flow':'')});
+    line.append(elem('title',{},`${edge.source} ↔ ${edge.target}: ${edge.weight}`));svg.append(line);
+  }
+  for(const node of state.nodes){const ratio=peak?node.energy/peak:0;
+    const group=elem('g',{class:'node',transform:`translate(${node.x} ${node.y})`,tabindex:0,role:'button','aria-label':`${node.id}, energy ${node.energy.toFixed(3)}, capacity ${node.capacity}`});
+    group.append(elem('circle',{r:22+ratio*13,fill:`hsl(${195-ratio*170} 70% 62%)`,stroke:node.id===selected?'#fff':'#18273d','stroke-width':node.id===selected?4:2}));
+    if(node.energy>node.capacity)group.append(elem('circle',{r:41,fill:'none',stroke:'#ff9393','stroke-dasharray':'4 5'}));
+    group.append(elem('text',{y:58,'text-anchor':'middle',fill:'#dde7f6','font-size':16},node.id),elem('text',{y:5,'text-anchor':'middle',fill:'#101a2a','font-size':14,'font-weight':700},node.energy.toFixed(1)));
+    group.addEventListener('pointerdown',event=>{if(busy)return;pause();selected=node.id;drag=node.id;svg.setPointerCapture(event.pointerId);render();});
+    group.addEventListener('keydown',event=>{if(busy)return;if(event.key==='Enter'||event.key===' '){event.preventDefault();pause();selected=node.id;render();}
+      const move={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[event.key];if(move){event.preventDefault();pause();selected=node.id;node.x=Math.max(45,Math.min(955,node.x+move[0]));node.y=Math.max(45,Math.min(620,node.y+move[1]));render();}
+      if(event.key==='Enter'||event.key===' '||move){const index=state.nodes.findIndex(n=>n.id===selected);svg.querySelectorAll('.node')[index].focus();}});
+    svg.append(group);
+  }
+}
+$('graph').addEventListener('pointermove',event=>{if(!drag||busy)return;const point=new DOMPoint(event.clientX,event.clientY).matrixTransform($('graph').getScreenCTM().inverse());const node=state.nodes.find(n=>n.id===drag);node.x=Math.max(45,Math.min(955,point.x));node.y=Math.max(45,Math.min(620,point.y));render();});
+for(const type of ['pointerup','pointercancel','lostpointercapture'])$('graph').addEventListener(type,()=>drag=null);
+async function tick(){if(!playing)return;if(await request('step')){if(playing)timer=setTimeout(tick,700);}}
+$('play').onclick=()=>{if(playing){pause();render();}else if(!busy){playing=true;$('play').textContent='Pause';tick();}};
+$('step').onclick=()=>{pause();request('step');};
+$('reset').onclick=async()=>{pause();if(await request('validate',demo())){ $('spike').value='100';$('weight').value='1'; }};
+$('selected').onchange=()=>{pause();selected=$('selected').value;render();};
+async function edit(fn){pause();const candidate=copy(state);try{fn(candidate);candidate.phase=0;await request('validate',candidate);}catch(error){status(error.message,true);}}
+function numeric(id){const raw=$(id).value;if(raw.trim()==='')throw new Error('Enter a number');const value=Number(raw);if(!Number.isFinite(value))throw new Error('Enter a finite number');return value;}
+$('apply').onclick=()=>edit(s=>{const n=s.nodes.find(n=>n.id===selected);n.energy=numeric('energy');n.capacity=numeric('capacity');});
+$('applyDt').onclick=()=>edit(s=>s.dt=numeric('dt'));
+$('add').onclick=()=>edit(s=>{let id=1;while(s.nodes.some(n=>n.id===`psi-${id}`))id++;s.nodes.push({id:`psi-${id}`,energy:0,capacity:100,x:500,y:350});});
+$('remove').onclick=()=>edit(s=>{s.nodes=s.nodes.filter(n=>n.id!==selected);s.edges=s.edges.filter(e=>e.source!==selected&&e.target!==selected);});
+const matches=(e,a,b)=>(e.source===a&&e.target===b)||(e.source===b&&e.target===a);
+$('connect').onclick=()=>edit(s=>{const target=$('target').value;if(!target)throw new Error('Add a second node first');s.edges=s.edges.filter(e=>!matches(e,selected,target));s.edges.push({source:selected,target,weight:numeric('weight')});});
+$('disconnect').onclick=()=>edit(s=>s.edges=s.edges.filter(e=>!matches(e,selected,$('target').value)));
+$('inject').onclick=()=>{pause();try{request('spike',state,{target:selected,amount:numeric('spike')});}catch(error){status(error.message,true);}};
+$('save').onclick=()=>{pause();const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='tau-lattice.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('load').onclick=()=>{pause();$('file').click();};
+$('file').onchange=async()=>{const file=$('file').files[0];if(!file)return;try{if(file.size>1000000)throw new Error('JSON file must be at most 1 MB');const candidate=JSON.parse(await file.text());await request('validate',candidate);}catch(error){status(error.message,true);}finally{$('file').value='';}};
+request('validate',demo());
+
+
+</script></body></html>
